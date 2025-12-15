@@ -1,6 +1,7 @@
 #!/bin/env python
 #
-# Routines for generting indexes for Eagle merger trees
+# Routines to generate depth first indexes for merger trees.
+# (as in the EAGLE and Millennium databases)
 #
 
 import numpy as np
