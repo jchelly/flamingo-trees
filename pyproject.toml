@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flamingo_trees"
+dynamic = ["version"]
+authors = [
+  { name="John Helly", email="j.c.helly@durham.ac.uk" },
+]
+description = "Module for reading FLAMINGO merger tree output."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "unyt>=3.0",
+    "pytest",
+    "h5py",
+    "hdfstream>=0.0.22",
+]
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/jchelly/flamingo-trees"
+Repository = "https://github.com/jchelly/flamingo-trees.git"
+Issues = "https://github.com/jchelly/flamingo-trees/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "node-and-date"
