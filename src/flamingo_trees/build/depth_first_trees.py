@@ -3,6 +3,8 @@
 # Code to generate depth first indexed merger trees from SOAP output
 #
 
+from collections import defaultdict
+
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
 comm_rank = comm.Get_rank()
@@ -43,37 +45,51 @@ def make_soap_trees(soap_format, first_snap, last_snap, output_file, pass_throug
         nr_halos_total = None
     nr_halos_total = comm.bcast(nr_halos_total)
 
-    # Now read in all halo properties. Will create one big array for each one.
-    data = {}
-    offset = 0
+    # Now read in all halo properties. For each property we have a list.
+    # Each list item is the local part of a distributed array with the data
+    # for one snapshot.
+    data = defaultdict(list)
     for snap_nr in range(first_snap, last_snap+1):
         if comm_rank == 0:
             print(f"Reading snapshot: {snap_nr}")
         with h5py.File(soap_format.format(snap_nr=snap_nr), "r", driver="mpio", comm=comm) as soap:
             # Read all properties from SOAP
             for name in datasets:
-                # Get metadata for this property
-                dataset = soap[name]
-                dtype = dataset.dtype
-                shape = (nr_halos_total,)+dataset.shape[1:]
-                # Allocate storage, if we didn't already
-                if name not in data:
-                    data[name] = np.ndarray(shape, dtype=dtype)
-                n = dataset.shape[0]
-                # Read the data
-                if comm_rank == 0:
-                    print(f"  {name}")
-                data[name][offset:offset+n,...] = phdf5.collective_read(dataset, comm)
-            # Also store the snapshot number
-            if "SnapshotNumber" not in data:
-                data["SnapshotNumber"] = np.ndarray(nr_halos_total, dtype=np.int32)
-            data["SnapshotNumber"][offset:offset+n] = snap_nr
-            # And the index in the SOAP file
-            if "SOAPIndex" not in data:
-                data["SOAPIndex"] = np.ndarray(nr_halos_total, dtype=np.int32)
-            data["SOAPIndex"][offset:offset+n] = np.arange(n, dtype=int)
-            # Then advance to the next part of the output arrays
-            offset += n
+                data[name].append(phdf5.collective_read(soap[name], comm))
+            # Store number of halos read from this snapshot on this MPI rank
+            nr_halos_local = data["InputHalos/HBTplus/TrackId"][-1].shape[0]
+            # Store the snapshot number for these halos
+            data["SnapshotNumber"].append(np.ones(nr_halos_local, dtype=np.int32)*snap_nr)
+            # Store the index in the SOAP catalogue for these halos
+            nr_halos_prev = comm.scan(nr_halos_local) - nr_halos_local
+            data["SOAPIndex"].append(np.arange(nr_halos_local, dtype=int)+nr_halos_prev)
+
+    for snap_nr in range(first_snap, last_snap+1):
+        if comm_rank == 0:
+            print(f"Assigning IDs for snapshot: {snap_nr}")
+
+        i = snap_nr - first_snap
+        # Assign a unique ID to each halo by combining snap num and trackid
+        trackid = data["InputHalos/HBTplus/TrackId"][i]
+        assert np.all(trackid < (1 << 32))
+        snapnum = data["SnapshotNumber"][i]
+        data["UniqueId"].append(trackid.astype(np.int64) + (snapnum.astype(np.int64) << 32))
+
+        # Assign a unique descendant ID to each halo
+        descendant_trackid = data["InputHalos/HBTplus/DescendantTrackId"][i]
+        if snap_nr < last_snap:
+            # If the same trackid exists at the next snapshot in SOAP, that's the descendant.
+            # Otherwise we go with the descendant trackid.
+            later_trackid = data["InputHalos/HBTplus/TrackId"][i + 1]
+            same_trackid_index = psort.parallel_match(trackid, later_trackid, comm=comm)
+            chosen_descendant_trackid = np.where(same_trackid_index>=0, trackid, descendant_trackid)
+            data["UniqueDescendantId"].append(chosen_descendant_trackid.astype(np.int64) + ((snap_nr+1) << 32))
+        else:
+            # At the last snapshot, no halo has a descendant
+            data["UniqueDescendantId"].append(-np.ones_like(trackid, dtype=np.int64))
+
+    # Assign halos with no descendant to ranks? Maybe spatially? Stick with SOAP decomposition?
+    # Move halos with descendant to same rank as descendant?
 
 
 if __name__ == "__main__":
