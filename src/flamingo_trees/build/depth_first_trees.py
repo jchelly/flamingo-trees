@@ -68,6 +68,11 @@ def make_soap_trees(soap_format, first_snap, last_snap, output_file, pass_throug
             if "SnapshotNumber" not in data:
                 data["SnapshotNumber"] = np.ndarray(nr_halos_total, dtype=np.int32)
             data["SnapshotNumber"][offset:offset+n] = snap_nr
+            # And the index in the SOAP file
+            if "SOAPIndex" not in data:
+                data["SOAPIndex"] = np.ndarray(nr_halos_total, dtype=np.int32)
+            data["SOAPIndex"][offset:offset+n] = np.arange(n, dtype=int)
+            # Then advance to the next part of the output arrays
             offset += n
 
 
