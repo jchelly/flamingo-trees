@@ -37,4 +37,4 @@ version_scheme = "guess-next-dev"
 local_scheme = "node-and-date"
 
 [project.optional-dependencies]
-mpi = ["mpi4py", "virgodc>=1.0.2"]
+mpi = ["mpi4py", "virgodc>=1.0.2", "pytest-mpi"]
