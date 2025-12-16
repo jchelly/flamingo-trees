@@ -25,12 +25,14 @@ def read_snapshot_data(soap_format, snap_nr, cache={}):
     # Discard data we don't need any more
     for i in list(cache.keys()):
         if i < snap_nr - 1:
-            print(f"  Discarding snapshot {i}")
+            if comm_rank == 0:
+                print(f"  Discarding snapshot {i}")
             del cache[i]
 
     # Ensure this snapshot is in the cache
     if snap_nr not in cache:
-        print(f"  Reading snapshot {snap_nr}")
+        if comm_rank == 0:
+            print(f"  Reading snapshot {snap_nr}")
         data = {}
         with h5py.File(soap_format.format(snap_nr=snap_nr), "r", driver="mpio", comm=comm) as soap:
             for name in dataset_names:
