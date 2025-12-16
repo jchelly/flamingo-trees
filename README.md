@@ -4,7 +4,17 @@
 
 TODO!
 
-## Constructing merger trees
+## Adding SOAP indexes
+
+For each halo, COLIBRE SOAP outputs contain the index of the same
+TrackId at the previous and next snapshots. These are not present in
+the FLAMINGO version of SOAP, but we could put them in a separate
+merger tree file. E.g. a single file with one group per snapshot and
+datasets
+
+Maybe also add a dataset that translates TrackId to SOAP index?
+
+## Constructing depth first merger trees
 
 ### Input halo catalogue
 
@@ -28,7 +38,7 @@ HBT-HERONS.
   * Label (or discard?) tracks which have ended
   * Determine descendant index for each halo
     * Same TrackId if track hasn't ended
-    * SInkTrackId or DescendantTrackId if track has ended
+    * SinkTrackId or DescendantTrackId if track has ended
   * Determine final descendant for each halo
   * Move all halos with the same final descendant to the same MPI rank
   * Compute depth first index within each tree
@@ -39,3 +49,7 @@ Also need to pass through SOAP index for each halo for cross referencing.
 Pass through a few other properties too?
 
 Write out one big file per simulation?
+
+Probably also want a dataset that gives the index in the merger tree
+given a snapshot number and SOAP index or TrackId (similar to VR
+trees).
