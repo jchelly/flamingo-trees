@@ -37,7 +37,8 @@ def make_soap_trees(soap_format, first_snap, last_snap, output_file, pass_throug
         nr_halos_total = 0
         for snap_nr in range(first_snap, last_snap+1):
             with h5py.File(soap_format.format(snap_nr=snap_nr), "r") as soap:
-                nr_halos_total += soap["InputHalos/IsCentral"].shape[0]
+                nr_halos_total += soap["InputHalos/NumberOfBoundParticles"].shape[0]
+        print(f"Total number of halos: {nr_halos_total}")
     else:
         nr_halos_total = None
     nr_halos_total = comm.bcast(nr_halos_total)
@@ -58,8 +59,10 @@ def make_soap_trees(soap_format, first_snap, last_snap, output_file, pass_throug
                 # Allocate storage, if we didn't already
                 if name not in data:
                     data[name] = np.ndarray(shape, dtype=dtype)
-                n = shape[0]
+                n = dataset.shape[0]
                 # Read the data
+                if comm_rank == 0:
+                    print(f"  {name}")
                 data[name][offset:offset+n,...] = phdf5.collective_read(dataset, comm)
             # Also store the snapshot number
             if "SnapshotNumber" not in data:
