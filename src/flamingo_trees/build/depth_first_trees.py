@@ -13,6 +13,7 @@ comm_size = comm.Get_size()
 import numpy as np
 import h5py
 
+from virgo.util.match import match
 import virgo.mpi.parallel_hdf5 as phdf5
 import virgo.mpi.parallel_sort as psort
 
@@ -112,6 +113,24 @@ def make_soap_trees(soap_format, first_snap, last_snap, output_file, pass_throug
                 snapshot[snap_nr][name] = psort.fetch_elements(snapshot[snap_nr][name], order, comm=comm)
                 snapshot[snap_nr][name] = psort.repartition(snapshot[snap_nr][name], nr_sent_to_rank, comm=comm)
 
+        # Assign unique identifiers to the halos
+        trackid1 = snapshot[snap_nr]["InputHalos/HBTplus/TrackId"]
+        descid1  = snapshot[snap_nr]["InputHalos/HBTplus/DescendantTrackId"]
+        assert np.all(trackid1 < (1 << 32))
+        snapshot[snap_nr]["UniqueId"] = trackid1.astype(np.int64) + (snap_nr << 32)
+
+        # Assign descendant identifiers to the halos. At this point, the descendant should
+        # always be on the same MPI rank if it exists.
+        if snap_nr == last_snap:
+            # Halos at the final snapshot have no descendant
+            snapshot[snap_nr]["UniqueDescendantId"] = -np.ones_like(snapshot[snap_nr]["UniqueId"])
+        else:
+            # Locate the descendant
+            trackid2 = snapshot[snap_nr+1]["InputHalos/HBTplus/TrackId"]
+            same_trackid_index = match(trackid1, trackid2)
+            desc_trackid_index = match(descid1, trackid2)
+            # Should either find a descendant OR have DescendantTrackId == -1
+            assert np.all((same_trackid_index >= 0) | (desc_trackid_index >= 0) | (descid1 == -1))
 
 if __name__ == "__main__":
 
