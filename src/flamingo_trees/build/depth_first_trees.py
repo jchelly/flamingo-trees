@@ -17,6 +17,8 @@ from virgo.util.match import match
 import virgo.mpi.parallel_hdf5 as phdf5
 import virgo.mpi.parallel_sort as psort
 
+from .index_trees import depth_first_index
+
 
 def read_soap_halos_for_snapshot(soap_format, snap_nr, datasets):
     """
@@ -140,7 +142,9 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
             snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] = np.where(same_trackid_index >= 0, trackid1, descid1)
             del descid1
             chosen_trackid_index = np.where(same_trackid_index >= 0, same_trackid_index, desc_trackid_index)
-            # Determine which MPI rank contains the descendant of each halo
+            # Determine which MPI rank contains the descendant of each halo.
+            # TODO: this could be done more efficiently by using searchsorted to translate
+            # chosen_trackid_index into an MPI rank. Would need to handle empty ranks carefully.
             have_descendant = chosen_trackid_index >= 0
             this_rank = np.ones(len(trackid2), dtype=int)*comm_rank # distributed array with MPI rank of each halo at snapshot snap_nr+1
             destination_rank = np.ones(len(trackid1), dtype=int) * comm_rank # leave halo on current rank if it has no descendant
@@ -162,21 +166,38 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
         assert np.all(trackid1 < (1 << 32))
         snapshot[snap_nr]["UniqueId"] = trackid1.astype(np.int64) + (snap_nr << 32)
 
+        # Assign progenitor weight. This determines the ordering of progenitors.
+        snapshot[snap_nr]["ProgenitorWeight"] = snapshot[snap_nr]["InputHalos/HBTplus/LastMaxMass"].copy()
+
         # Assign unique descendant identifiers to the halos. At this point, the descendant should
         # always be on the same MPI rank if it exists.
         if snap_nr == last_snap:
             # Halos at the final snapshot have no descendant
             snapshot[snap_nr]["UniqueDescendantId"] = -np.ones_like(snapshot[snap_nr]["UniqueId"])
         else:
-            # Halos at earlier snapshots might have a descendant at the next snapshot
+            # Halos at earlier snapshots might have a descendant at the next snapshot.
+            # Where they do, compute its unique ID.
             snapshot[snap_nr]["UniqueDescendantId"] = np.where(
                 snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] >= 0,
                 snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] + ((snap_nr+1) << 32),
                 -1)
-            # Halos with a descendant ID should all match up now
+            # Halos with a non-negative descendant ID should all match up now
             local_descendant_index = match(snapshot[snap_nr]["UniqueDescendantId"],
                                            snapshot[snap_nr+1]["UniqueId"])
             assert np.all((local_descendant_index >= 0) | (snapshot[snap_nr]["UniqueDescendantId"] < 0))
+
+            # Where a halo maintains its TrackId it should be the main (first) progenitor.
+            # Find a large ProgenitorWeight we can assign to ensure this.
+            max_mass_local = np.amax(snapshot[snap_nr]["InputHalos/HBTplus/LastMaxMass"])
+            max_mass_global = comm.allreduce(max_mass_local, op=MPI.MAX)
+            main_prog_weight = max_mass_global * 1.5
+            assert main_prog_weight > max_mass_global
+
+            # Find main progenitors and set their weight
+            trackid1 = snapshot[snap_nr]["InputHalos/HBTplus/TrackId"]
+            trackid2 = snapshot[snap_nr+1]["InputHalos/HBTplus/TrackId"]
+            is_main = (local_descendant_index >= 0) & (trackid1 == trackid2[local_descendant_index])
+            snapshot[snap_nr]["ProgenitorWeight"][is_main] = main_prog_weight
 
 
 if __name__ == "__main__":
