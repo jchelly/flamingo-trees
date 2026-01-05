@@ -3,6 +3,7 @@
 # Code to generate depth first indexed merger trees from SOAP output
 #
 
+import os.path
 from collections import defaultdict
 
 from mpi4py import MPI
@@ -179,8 +180,8 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
             # Where they do, compute its unique ID.
             snapshot[snap_nr]["UniqueDescendantId"] = np.where(
                 snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] >= 0,
-                snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] + ((snap_nr+1) << 32),
-                -1)
+                snapshot[snap_nr]["NextSnapshot/DescendantTrackId"].astype(np.int64) + ((snap_nr+1) << 32),
+                np.int64(-1))
             # Halos with a non-negative descendant ID should all match up now
             local_descendant_index = match(snapshot[snap_nr]["UniqueDescendantId"],
                                            snapshot[snap_nr+1]["UniqueId"])
@@ -198,6 +199,59 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
             trackid2 = snapshot[snap_nr+1]["InputHalos/HBTplus/TrackId"]
             is_main = (local_descendant_index >= 0) & (trackid1 == trackid2[local_descendant_index])
             snapshot[snap_nr]["ProgenitorWeight"][is_main] = main_prog_weight
+
+    # Combine arrays for all snapshots
+    tree = {}
+    all_names = list(snapshot[last_snap].keys())
+    for name in all_names:
+        tree[name] = np.concatenate([snapshot[sn][name] for sn in range(first_snap, last_snap+1)])
+    del snapshot
+
+    # Compute depth first indexing for local halos
+    if comm_rank == 0:
+        print("Computing depth first IDs")
+    galaxyid, endmainbranchid, lastprogenitorid = depth_first_index(tree["UniqueId"],
+                                                                    tree["UniqueDescendantId"],
+                                                                    tree["ProgenitorWeight"])
+    # Discard arrays which we wont output
+    del tree["UniqueId"]
+    del tree["UniqueDescendantId"]
+    del tree["ProgenitorWeight"]
+
+    # Make depth first IDs unique between MPI ranks
+    min_local_id = np.amin(galaxyid)
+    max_local_id = np.amax(galaxyid)
+    assert min_local_id == 1
+    assert max_local_id == len(galaxyid)
+    assert np.all((endmainbranchid >= min_local_id) & (endmainbranchid <= max_local_id))
+    assert np.all((lastprogenitorid >= min_local_id) & (lastprogenitorid <= max_local_id))
+    offset = comm.scan(max_local_id) - max_local_id
+    galaxyid += offset
+    endmainbranchid += offset
+    lastprogenitorid += offset
+
+    # Store new indexes
+    tree["GalaxyId"] = galaxyid
+    tree["EndMainBranchId"] = endmainbranchid
+    tree["LastProgenitorId"] = lastprogenitorid
+
+    # Sort all quantities by depth first ID
+    order = psort.parallel_sort(galaxyid, return_index=True, comm=comm)
+    for name in tree:
+        if name != "GalaxyId":
+            if comm_rank == 0:
+                print(f"Sorting: {name}")
+            tree[name] = psort.fetch_elements(tree[name], order, comm=comm)
+
+    # Write out the results to the output file
+    if comm_rank == 0:
+        print(f"Writing: {output_file}")
+    with h5py.File(output_file, "w", driver="mpio", comm=comm) as outfile:
+        tree_group = outfile.create_group("Tree")
+        for name in tree:
+            phdf5.collective_write(tree_group, os.path.basename(name), tree[name], comm=comm)
+
+    # TODO: compute index in tree file for each SOAP halo?
 
 
 if __name__ == "__main__":
