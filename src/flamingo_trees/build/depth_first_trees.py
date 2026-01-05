@@ -257,7 +257,7 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
     # Write out the results to the output file
     if comm_rank == 0:
         print(f"Writing: {output_file}")
-    tree_group = output_file.create_group("Tree")
+    tree_group = output_file.require_group("Tree")
     for name in tree:
         dset = phdf5.collective_write(tree_group, os.path.basename(name), tree[name], comm=comm)
         if name in descriptions:

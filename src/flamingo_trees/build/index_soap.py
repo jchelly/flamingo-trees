@@ -46,7 +46,7 @@ def read_snapshot_data(soap_format, snap_nr, cache={}):
 def make_soap_index(soap_format, first_snap, last_snap, output_file):
 
     # Create group for per-snapshot info
-    snap_group = output_file.create_group("Snapshots")
+    snap_group = output_file.require_group("Snapshots")
 
     for snap_nr in range(first_snap, last_snap+1):
 
@@ -81,7 +81,7 @@ def make_soap_index(soap_format, first_snap, last_snap, output_file):
             soap_index_of_trackid = np.zeros(0, dtype=int)
 
         # Write out the result
-        current_snap_group = snap_group.create_group(f"{snap_nr:04d}")
+        current_snap_group = snap_group.require_group(f"{snap_nr:04d}")
         dset = phdf5.collective_write(current_snap_group, "SOAPIndexOfTrackId", soap_index_of_trackid, comm, gzip=6)
         dset.attrs["Description"] = "For each TrackId this gives the index in the SOAP catalogue, or -1 if the TrackId is not present"
 
@@ -89,7 +89,7 @@ def make_soap_index(soap_format, first_snap, last_snap, output_file):
 if __name__ == "__main__":
 
     from virgo.mpi.util import MPIArgumentParser
-    parser = MPIArgumentParser(comm=comm, description="Compute index arrays for SOAP outputs.")
+    parser = MPIArgumentParser(comm=comm, description="Compute index arrays to allow lookup by TrackId in SOAP outputs.")
     parser.add_argument("soap_format", type=str, help="Format string to make SOAP filenames")
     parser.add_argument("first_snap", type=int, help="Index of the first snapshot in the simulation")
     parser.add_argument("last_snap", type=int, help="Index of the last snapshot in the simulation")
