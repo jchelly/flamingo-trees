@@ -263,6 +263,31 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
         if name in descriptions:
             dset.attrs["Description"] = descriptions[name]
 
+    # Next we want to compute the index in the tree for each unique (SOAPIndex,SnapshotNumber).
+    # Make an array with the tree index of each halo.
+    nr_local_halos = len(tree["GalaxyId"])
+    tree_index = np.arange(nr_local_halos, dtype=int) + (comm.scan(nr_local_halos) - nr_local_halos)
+
+    # Loop over simulation snapshots
+    for snap_nr in range(first_snap, last_snap+1):
+
+        if comm_rank == 0:
+            print(f"Compute index in tree of each SOAP halo for snap {snap_nr}")
+
+        # Find the SOAPIndex and tree index of all halos at this snapshot
+        at_snap = tree["SnapshotNumber"] == snap_nr
+        soap_index_at_snap = tree["SOAPIndex"][at_snap]
+        tree_index_at_snap = tree_index[at_snap]
+
+        # Sort by SOAP index
+        order = psort.parallel_sort(soap_index_at_snap, return_index=True, comm=comm)
+        tree_index_at_snap = psort.fetch_elements(tree_index_at_snap, order, comm=comm)
+
+        # Write out the tree index for each SOAP halo
+        snap_group = output_file.require_group(f"Snapshots/{snap_nr:04d}")
+        dset = phdf5.collective_write(snap_group, "TreeIndexOfSOAPHalo", tree_index_at_snap, comm=comm)
+        dset.attrs["Description"] = "For each halo in the SOAP catalogue this gives the corresponding index in the merger tree arrays"
+
 
 if __name__ == "__main__":
 
