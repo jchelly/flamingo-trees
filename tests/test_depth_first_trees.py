@@ -30,5 +30,5 @@ def test_depth_first_trees(tmp_path):
 
     # Run the code
     output_file = tmp_path / "merger_tree.hdf5"
-    make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, None)
-
+    with h5py.File(output_file, "w", driver="mpio", comm=comm) as f:
+        make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, f, None)

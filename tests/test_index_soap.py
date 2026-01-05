@@ -49,22 +49,6 @@ def test_index_soap(tmp_path):
                 nr_halos = len(trackid)
                 ok = ok & np.all(soap_index[trackid] == np.arange(nr_halos, dtype=int))
 
-                # Check descendant index, if this is not the last snapshot
-                if snap_nr < last_snap:
-                    descendant_index = tree_file[f"Snapshots/{snap_nr:04d}/DescendantIndex"][...]
-                    with h5py.File(soap_format.format(snap_nr=snap_nr+1), "r") as soap_file:
-                        trackid_next_snap = soap_file["InputHalos/HBTplus/TrackId"][...]
-                    ptr = match(trackid, trackid_next_snap)
-                    ok = ok & np.all(ptr == descendant_index)
-
-                # Check progenitor index, if this is not the first snapshot
-                if snap_nr > first_snap:
-                    progenitor_index = tree_file[f"Snapshots/{snap_nr:04d}/ProgenitorIndex"][...]
-                    with h5py.File(soap_format.format(snap_nr=snap_nr-1), "r") as soap_file:
-                        trackid_prev_snap = soap_file["InputHalos/HBTplus/TrackId"][...]
-                    ptr = match(trackid, trackid_prev_snap)
-                    ok = ok & np.all(ptr == progenitor_index)
-
     # Ensure that if anything went wrong, all ranks abort
     ok = comm.bcast(ok)
     assert ok

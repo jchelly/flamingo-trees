@@ -85,22 +85,6 @@ def make_soap_index(soap_format, first_snap, last_snap, output_file):
         dset = phdf5.collective_write(current_snap_group, "SOAPIndexOfTrackId", soap_index_of_trackid, comm, gzip=6)
         dset.attrs["Description"] = "For each TrackId this gives the index in the SOAP catalogue, or -1 if the TrackId is not present"
 
-        # Compute descendant info if this is not the last snapshot
-        if snap_nr < last_snap:
-            next_snap = read_snapshot_data(soap_format, snap_nr+1)
-            next_trackid = next_snap["InputHalos/HBTplus/TrackId"]
-            descendant_index = psort.parallel_match(trackids, next_trackid, comm=comm)
-            dset = phdf5.collective_write(current_snap_group, "DescendantIndex", descendant_index, comm, gzip=6)
-            dset.attrs["Description"] = "For each halo in the SOAP catalogue for this snapshot, this gives the index of the same TrackId in the SOAP catalogue for the next snapshot (-1 if not present)"
-
-        # Compute progenitor info if this is not the first snapshot
-        if snap_nr > first_snap:
-            prev_snap = read_snapshot_data(soap_format, snap_nr-1)
-            prev_trackid = prev_snap["InputHalos/HBTplus/TrackId"]
-            progenitor_index = psort.parallel_match(trackids, prev_trackid, comm=comm)
-            dset = phdf5.collective_write(current_snap_group, "ProgenitorIndex", progenitor_index, comm, gzip=6)
-            dset.attrs["Description"] = "For each halo in the SOAP catalogue for this snapshot, this gives the index of the same TrackId in the SOAP catalogue for the previous snapshot (-1 if not present)"
-
 
 if __name__ == "__main__":
 

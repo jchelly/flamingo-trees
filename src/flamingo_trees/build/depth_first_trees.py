@@ -21,6 +21,16 @@ import virgo.mpi.parallel_sort as psort
 from .index_trees import depth_first_index
 
 
+descriptions = {
+    "GalaxyId"         : "Unique identifier for this halo, assigned by walking the merger tree in depth first order",
+    "EndMainBranchId"  : "GalaxyId of the earliest halo on this halo's main progenitor branch",
+    "LastProgenitorId" : "The maximum GalaxyId of any progenitor of this halo",
+    "SOAPIndex"        : "The index of this halo in the SOAP catalogue",
+    "SnapshotNumber"   : "Which simulation snapshot this halo was identified in",
+    "InputHalos/HBTplus/TrackId" : "HBT-HERONS track identifier, which remains constant between snapshots",
+}
+
+
 def read_soap_halos_for_snapshot(soap_format, snap_nr, datasets):
     """
     Read the specified properties of SOAP halos at snapshot snap_nr
@@ -217,6 +227,7 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
     del tree["UniqueId"]
     del tree["UniqueDescendantId"]
     del tree["ProgenitorWeight"]
+    del tree["InputHalos/HBTplus/LastMaxMass"]
 
     # Make depth first IDs unique between MPI ranks
     min_local_id = np.amin(galaxyid)
@@ -246,12 +257,11 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
     # Write out the results to the output file
     if comm_rank == 0:
         print(f"Writing: {output_file}")
-    with h5py.File(output_file, "w", driver="mpio", comm=comm) as outfile:
-        tree_group = outfile.create_group("Tree")
-        for name in tree:
-            phdf5.collective_write(tree_group, os.path.basename(name), tree[name], comm=comm)
-
-    # TODO: compute index in tree file for each SOAP halo?
+    tree_group = output_file.create_group("Tree")
+    for name in tree:
+        dset = phdf5.collective_write(tree_group, os.path.basename(name), tree[name], comm=comm)
+        if name in descriptions:
+            dset.attrs["Description"] = descriptions[name]
 
 
 if __name__ == "__main__":
@@ -266,4 +276,5 @@ if __name__ == "__main__":
     parser.add_argument("--pass-through", type=str, default=None, help="Comma separated list of datasets to pass through")
     args = parser.parse_args()
 
-    make_soap_trees(args.hbt_dir, args.soap_format, args.first_snap, args.last_snap, args.output_file, args.pass_through)
+    with h5py.File(args.output_file, "w", driver="mpio", comm=comm) as output_file:
+        make_soap_trees(args.hbt_dir, args.soap_format, args.first_snap, args.last_snap, output_file, args.pass_through)
