@@ -115,9 +115,7 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
             read_hbt_descendants(hbt_dir, snap_nr, snapshot[snap_nr])
 
         if snap_nr == last_snap:
-            # At the final snapshot, repartition to have a fixed number of
-            # halos per rank with any extra on the last rank. This makes it
-            # easy to compute what rank a halo is on given its global index.
+            # At the final snapshot, repartition for even(ish) load balancing.
             local_nr_halos = len(snapshot[snap_nr]["InputHalos/HBTplus/TrackId"])
             total_nr_halos = comm.allreduce(local_nr_halos)
             nr_halos_per_rank = total_nr_halos // comm_size
@@ -136,17 +134,23 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
             trackid2 = snapshot[snap_nr+1]["InputHalos/HBTplus/TrackId"]
             same_trackid_index = psort.parallel_match(trackid1, trackid2, comm=comm)
             desc_trackid_index = psort.parallel_match(descid1,  trackid2, comm=comm)
-            destination_rank = np.where(same_trackid_index >= 0,
-                                        np.clip(same_trackid_index // nr_halos_per_rank, a_min=0, a_max=comm_size-1),
-                                        np.clip(desc_trackid_index // nr_halos_per_rank, a_min=0, a_max=comm_size-1))
-            # Some subhalos might have no descendant at all. Leave these on their current rank so
-            # that they follow SOAP's spatial ordering and are spread over all ranks.
-            no_descendant = (same_trackid_index < 0) & (desc_trackid_index < 0)
-            destination_rank[no_descendant] = comm_rank
+            # If (and only if) DescendantTrackId >= 0, we should find the halo with that TrackId at the next snapshot
+            assert np.all((desc_trackid_index >= 0) == (snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] >= 0))
+            # Choose the descendant track and overwrite DescendantTrackId with the new choice
+            snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] = np.where(same_trackid_index >= 0, trackid1, descid1)
+            del descid1
+            chosen_trackid_index = np.where(same_trackid_index >= 0, same_trackid_index, desc_trackid_index)
+            # Determine which MPI rank contains the descendant of each halo
+            have_descendant = chosen_trackid_index >= 0
+            this_rank = np.ones(len(trackid2), dtype=int)*comm_rank # distributed array with MPI rank of each halo at snapshot snap_nr+1
+            destination_rank = np.ones(len(trackid1), dtype=int) * comm_rank # leave halo on current rank if it has no descendant
+            destination_rank[have_descendant] = psort.fetch_elements(this_rank, chosen_trackid_index[have_descendant], comm=comm)
             # Count halos to go to each rank
             nr_sent_to_rank = comm.allreduce(np.bincount(destination_rank, minlength=comm_size))
             # Get sorting order by destination
             order = psort.parallel_sort(destination_rank, return_index=True, comm=comm)
+            destination_rank = psort.repartition(destination_rank, nr_sent_to_rank, comm=comm)
+            assert np.all(destination_rank == comm_rank)
             del destination_rank
             # Rearrange the data
             for name in snapshot[snap_nr]:
@@ -158,19 +162,22 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
         assert np.all(trackid1 < (1 << 32))
         snapshot[snap_nr]["UniqueId"] = trackid1.astype(np.int64) + (snap_nr << 32)
 
-        # Assign descendant identifiers to the halos. At this point, the descendant should
+        # Assign unique descendant identifiers to the halos. At this point, the descendant should
         # always be on the same MPI rank if it exists.
         if snap_nr == last_snap:
             # Halos at the final snapshot have no descendant
             snapshot[snap_nr]["UniqueDescendantId"] = -np.ones_like(snapshot[snap_nr]["UniqueId"])
         else:
-            # Locate the descendant
-            trackid2 = snapshot[snap_nr+1]["InputHalos/HBTplus/TrackId"]
-            same_trackid_index = match(trackid1, trackid2)
-            descid1  = snapshot[snap_nr]["NextSnapshot/DescendantTrackId"]
-            desc_trackid_index = match(descid1, trackid2)
-            # Should either find a descendant OR have DescendantTrackId == -1
-            assert np.all((same_trackid_index >= 0) | (desc_trackid_index >= 0) | (descid1 == -1))
+            # Halos at earlier snapshots might have a descendant at the next snapshot
+            snapshot[snap_nr]["UniqueDescendantId"] = np.where(
+                snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] >= 0,
+                snapshot[snap_nr]["NextSnapshot/DescendantTrackId"] + ((snap_nr+1) << 32),
+                -1)
+            # Halos with a descendant ID should all match up now
+            local_descendant_index = match(snapshot[snap_nr]["UniqueDescendantId"],
+                                           snapshot[snap_nr+1]["UniqueId"])
+            assert np.all((local_descendant_index >= 0) | (snapshot[snap_nr]["UniqueDescendantId"] < 0))
+
 
 if __name__ == "__main__":
 
