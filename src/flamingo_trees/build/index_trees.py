@@ -89,6 +89,7 @@ def depth_first_index(nodeIndex, descendantIndex, mBranch, isMain):
     # Alloc. arrays for last progenitor and end of main branch
     endMainBranch  = depthFirst.copy()
     lastProgenitor = depthFirst.copy()
+    descendant     = -np.ones_like(depthFirst)
 
     # Loop over halos in descending order of depth first ID
     for iprog in np.argsort(-depthFirst):
@@ -99,6 +100,8 @@ def depth_first_index(nodeIndex, descendantIndex, mBranch, isMain):
             # If we're on the main branch, updated end of main branch ID
             if prog_ptr[idesc] == iprog and isMain[iprog]:
                 endMainBranch[idesc] = max(endMainBranch[iprog], endMainBranch[idesc])
+            # Set the descendant index
+            descendant[iprog] = depthFirst[idesc]
 
     # All array elements should have been set
     assert np.all(endMainBranch  >= 0)
@@ -110,4 +113,4 @@ def depth_first_index(nodeIndex, descendantIndex, mBranch, isMain):
     assert np.all(endMainBranch  >= depthFirst)
 
     # Return array with the indexes
-    return depthFirst, endMainBranch, lastProgenitor
+    return depthFirst, endMainBranch, lastProgenitor, descendant

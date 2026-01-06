@@ -25,6 +25,7 @@ descriptions = {
     "GalaxyId"         : "Unique identifier for this halo, assigned by walking the merger tree in depth first order",
     "EndMainBranchId"  : "GalaxyId of the earliest halo on this halo's main progenitor branch",
     "LastProgenitorId" : "The maximum GalaxyId of any progenitor of this halo",
+    "DescendantId"     : "GalaxyId of the descendant of this halo, or -1 if there is no descendant",
     "SOAPIndex"        : "The index of this halo in the SOAP catalogue",
     "SnapshotNumber"   : "Which simulation snapshot this halo was identified in",
     "InputHalos/HBTplus/TrackId" : "HBT-HERONS track identifier, which remains constant between snapshots",
@@ -250,10 +251,10 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
     # Compute depth first indexing for local halos
     if comm_rank == 0:
         print("Computing depth first IDs")
-    galaxyid, endmainbranchid, lastprogenitorid = depth_first_index(tree["UniqueId"],
-                                                                    tree["UniqueDescendantId"],
-                                                                    tree["ProgenitorWeight"],
-                                                                    tree["IsMainProgenitor"])
+    galaxyid, endmainbranchid, lastprogenitorid, descendantid = depth_first_index(tree["UniqueId"],
+                                                                                  tree["UniqueDescendantId"],
+                                                                                  tree["ProgenitorWeight"],
+                                                                                  tree["IsMainProgenitor"])
     # Discard arrays which we wont output
     del tree["UniqueId"]
     del tree["UniqueDescendantId"]
@@ -273,11 +274,15 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
     galaxyid += offset
     endmainbranchid += offset
     lastprogenitorid += offset
+    # Only add offset to descendant ID where we have a descendant
+    have_desc = descendantid >= 0
+    descendantid[have_desc] += offset
 
     # Store new indexes
     tree["GalaxyId"] = galaxyid
     tree["EndMainBranchId"] = endmainbranchid
     tree["LastProgenitorId"] = lastprogenitorid
+    tree["DescendantId"] = descendantid
 
     # Sort all quantities by depth first ID
     order = psort.parallel_sort(galaxyid, return_index=True, comm=comm)

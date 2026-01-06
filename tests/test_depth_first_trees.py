@@ -75,4 +75,6 @@ def test_depth_first_trees(tmp_path):
             # All halos on the same branch should be progenitors of the final halo
             assert np.all(tree["GalaxyId"][i1:i2] >= tree["GalaxyId"][i1])
             assert np.all(tree["GalaxyId"][i1:i2] <= tree["LastProgenitorId"][i1])
+            # Check descendant IDs along the branch
+            assert np.all(tree["DescendantId"][i1:i2][1:] == tree["GalaxyId"][i1:i2][:-1])
             i1 = i2
