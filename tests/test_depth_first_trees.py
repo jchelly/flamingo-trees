@@ -10,7 +10,7 @@ comm = MPI.COMM_WORLD
 comm_rank = comm.Get_rank()
 comm_size = comm.Get_size()
 
-from flamingo_trees.build.depth_first_trees import make_soap_trees
+from flamingo_trees.construction.depth_first_trees import make_soap_trees
 
 
 @pytest.mark.mpi
