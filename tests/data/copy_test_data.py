@@ -42,6 +42,7 @@ for snap_nr in range(first_snap, last_snap+1):
         with h5py.File(input_filename, "r") as infile:
             subhalos_in = infile["Subhalos"][...]
             nr_files = int(infile["NumberOfFiles"][0])
+            total_nr_subhalos = int(infile["NumberOfSubhalosInAllFiles"][0])
         dtype = [
             ("TrackId",             subhalos_in["TrackId"].dtype),
             ("SinkTrackId",         subhalos_in["SinkTrackId"].dtype),
@@ -55,4 +56,5 @@ for snap_nr in range(first_snap, last_snap+1):
         with h5py.File(output_filename, "w") as outfile:
             outfile.create_dataset("Subhalos", data=subhalos_out, chunks=chunks, shuffle=True, compression="gzip", compression_opts=9)
             outfile["NumberOfFiles"] = (nr_files,)
+            outfile["NumberOfSubhalosInAllFiles"] = (total_nr_subhalos,)
         file_nr += 1
