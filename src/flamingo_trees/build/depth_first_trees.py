@@ -52,6 +52,24 @@ def read_soap_halos_for_snapshot(soap_format, snap_nr, datasets):
     return data
 
 
+def read_hbt_total_nr_subhalos(hbt_dir, first_snap, last_snap):
+    """
+    Return a dict with {snap_nr : total_nr_subhalos} for each snapshot.
+    Includes orphan (unresolved) subhalos.
+    """
+    if comm_rank == 0:
+        result = {}
+        for snap_nr in range(first_snap, last_snap+1):
+            filename = f"{hbt_dir}/{snap_nr:03d}/SubSnap_{snap_nr:03d}.0.hdf5"
+            with h5py.File(filename, "r") as infile:
+                total_nr_subhalos = int(infile["NumberOfSubhalosInAllFiles"][0])
+            result[snap_nr] = total_nr_subhalos
+            print(f"Total number of TrackIds at snap {snap_nr} is {total_nr_subhalos}")
+    else:
+        result = None
+    return comm.bcast(result)
+
+
 def read_hbt_descendants(hbt_dir, snap_nr, soap):
     """
     Read descendant info for halos at snapshot snap_nr, which requires
@@ -286,7 +304,44 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
         # Write out the tree index for each SOAP halo
         snap_group = output_file.require_group(f"Snapshots/{snap_nr:04d}")
         dset = phdf5.collective_write(snap_group, "TreeIndexOfSOAPHalo", tree_index_at_snap, comm=comm)
-        dset.attrs["Description"] = "For each halo in the SOAP catalogue this gives the corresponding index in the merger tree arrays"
+        dset.attrs["Description"] = "For each resolved halo in the SOAP catalogue this gives the corresponding index in the merger tree arrays"
+
+    # Now compute the tree index associated with each TrackId. Here we want to make a set
+    # of arrays with one element per TrackId, including orphan halos not present in SOAP.
+    # First get the maximum TrackId in each snapshot.
+    total_nr_subhalos_at_snap = read_hbt_total_nr_subhalos(hbt_dir, first_snap, last_snap)
+
+    # Loop over simulation snapshots
+    for snap_nr in range(first_snap, last_snap+1):
+
+        if comm_rank == 0:
+            print(f"Compute index in tree of each TrackId for snap {snap_nr}")
+
+        # Construct a sorted, distributed array with all TrackIds at this snapshot.
+        # This includes entries for uresolved orphans which do not exist in the tree file.
+        total_nr_trackids = total_nr_subhalos_at_snap[snap_nr]
+        local_nr_trackids = total_nr_trackids // comm_size
+        if comm_rank == 0:
+            local_nr_trackids += (total_nr_trackids % comm_size)
+        assert comm.allreduce(local_nr_trackids) == total_nr_trackids
+        sorted_trackids_at_snap = np.arange(local_nr_trackids, dtype=int) + (comm.scan(local_nr_trackids) - local_nr_trackids)
+
+        # Allocate a distributed array with the tree index for each TrackId (i.e. the global array index is the TrackId)
+        # Will use tree_index = -1 to indicate when a TrackId is not in the tree.
+        sorted_tree_index_at_snap = -np.ones(local_nr_trackids, dtype=int)
+
+        # Find the trackid and treeindex of resolved subhalos at this snapshot
+        at_snap = tree["SnapshotNumber"] == snap_nr
+        trackid_at_snap = tree["InputHalos/HBTplus/TrackId"][at_snap]
+        tree_index_at_snap = tree_index[at_snap]
+
+        # Where a TrackId exists as a resolved halo, assign its TreeIndex
+        psort.reduce_elements(sorted_tree_index_at_snap, tree_index_at_snap, trackid_at_snap, op=MPI.MAX, comm=comm)
+
+        # Write out the result
+        snap_group = output_file.require_group(f"Snapshots/{snap_nr:04d}")
+        dset = phdf5.collective_write(snap_group, "TreeIndexOfTrackId", sorted_tree_index_at_snap, comm=comm)
+        dset.attrs["Description"] = "For each TrackId in the HBT-HERONS output this gives the corresponding index in the merger tree arrays. Unresolved TrackIds are not present in the merger tree and have TreeIndex=-1."
 
 
 if __name__ == "__main__":
