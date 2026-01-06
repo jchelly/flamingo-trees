@@ -15,6 +15,13 @@ import virgo.mpi.parallel_hdf5 as phdf5
 import virgo.mpi.parallel_sort as psort
 
 
+# Compression settings for output
+compression = {
+    "gzip" : 6,
+    "chunk" :8*1024*1024,
+}
+
+
 def read_snapshot_data(soap_format, snap_nr, cache={}):
 
     # Datasets we need from each snapshot
@@ -82,7 +89,7 @@ def make_soap_index(soap_format, first_snap, last_snap, output_file):
 
         # Write out the result
         current_snap_group = snap_group.require_group(f"{snap_nr:04d}")
-        dset = phdf5.collective_write(current_snap_group, "SOAPIndexOfTrackId", soap_index_of_trackid, comm, gzip=6)
+        dset = phdf5.collective_write(current_snap_group, "SOAPIndexOfTrackId", soap_index_of_trackid, comm=comm, **compression)
         dset.attrs["Description"] = "For each TrackId this gives the index in the SOAP catalogue, or -1 if the TrackId is not present"
 
 

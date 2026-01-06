@@ -30,6 +30,12 @@ descriptions = {
     "InputHalos/HBTplus/TrackId" : "HBT-HERONS track identifier, which remains constant between snapshots",
 }
 
+# Compression settings for output
+compression = {
+    "gzip" : 6,
+    "chunk" :8*1024*1024,
+}
+
 
 def read_soap_halos_for_snapshot(soap_format, snap_nr, datasets):
     """
@@ -286,7 +292,7 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
         print(f"Writing: {output_file}")
     tree_group = output_file.require_group("Tree")
     for name in tree:
-        dset = phdf5.collective_write(tree_group, os.path.basename(name), tree[name], comm=comm)
+        dset = phdf5.collective_write(tree_group, os.path.basename(name), tree[name], comm=comm, **compression)
         if name in descriptions:
             dset.attrs["Description"] = descriptions[name]
 
@@ -312,7 +318,7 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
 
         # Write out the tree index for each SOAP halo
         snap_group = output_file.require_group(f"Snapshots/{snap_nr:04d}")
-        dset = phdf5.collective_write(snap_group, "TreeIndexOfSOAPHalo", tree_index_at_snap, comm=comm)
+        dset = phdf5.collective_write(snap_group, "TreeIndexOfSOAPHalo", tree_index_at_snap, comm=comm, **compression)
         dset.attrs["Description"] = "For each resolved halo in the SOAP catalogue this gives the corresponding index in the merger tree arrays"
 
     # Now compute the tree index associated with each TrackId. Here we want to make a set
@@ -349,7 +355,7 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
 
         # Write out the result
         snap_group = output_file.require_group(f"Snapshots/{snap_nr:04d}")
-        dset = phdf5.collective_write(snap_group, "TreeIndexOfTrackId", sorted_tree_index_at_snap, comm=comm)
+        dset = phdf5.collective_write(snap_group, "TreeIndexOfTrackId", sorted_tree_index_at_snap, comm=comm, **compression)
         dset.attrs["Description"] = "For each TrackId in the HBT-HERONS output this gives the corresponding index in the merger tree arrays. Unresolved TrackIds are not present in the merger tree and have TreeIndex=-1."
 
 
