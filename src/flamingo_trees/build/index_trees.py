@@ -8,7 +8,7 @@ import numpy as np
 import virgo.util.match as ms
 
 
-def depth_first_index(nodeIndex, descendantIndex, mBranch):
+def depth_first_index(nodeIndex, descendantIndex, mBranch, isMain):
     """
     Calculate depth first indexing for the supplied tree(s).
     Progenitors are ordered by descending mBranch.
@@ -97,7 +97,7 @@ def depth_first_index(nodeIndex, descendantIndex, mBranch):
             # Update maximum ID of any progenitor of this descendant
             lastProgenitor[idesc] = max(lastProgenitor[iprog], lastProgenitor[idesc])
             # If we're on the main branch, updated end of main branch ID
-            if prog_ptr[idesc] == iprog:
+            if prog_ptr[idesc] == iprog and isMain[iprog]:
                 endMainBranch[idesc] = max(endMainBranch[iprog], endMainBranch[idesc])
 
     # All array elements should have been set

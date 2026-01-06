@@ -198,6 +198,9 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
         # Assign progenitor weight. This determines the ordering of progenitors.
         snapshot[snap_nr]["ProgenitorWeight"] = snapshot[snap_nr]["InputHalos/HBTplus/LastMaxMass"].copy()
 
+        # Allocate a flag for main progenitors
+        snapshot[snap_nr]["IsMainProgenitor"] = np.zeros(len(trackid1), dtype=bool)
+
         # Assign unique descendant identifiers to the halos. At this point, the descendant should
         # always be on the same MPI rank if it exists.
         if snap_nr == last_snap:
@@ -228,6 +231,9 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
             is_main = (local_descendant_index >= 0) & (trackid1 == trackid2[local_descendant_index])
             snapshot[snap_nr]["ProgenitorWeight"][is_main] = main_prog_weight
 
+            # Set main progenitor flag where descendant has the same TrackId
+            snapshot[snap_nr]["IsMainProgenitor"][is_main] = True
+
     # Combine arrays for all snapshots
     tree = {}
     all_names = list(snapshot[last_snap].keys())
@@ -240,11 +246,13 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
         print("Computing depth first IDs")
     galaxyid, endmainbranchid, lastprogenitorid = depth_first_index(tree["UniqueId"],
                                                                     tree["UniqueDescendantId"],
-                                                                    tree["ProgenitorWeight"])
+                                                                    tree["ProgenitorWeight"],
+                                                                    tree["IsMainProgenitor"])
     # Discard arrays which we wont output
     del tree["UniqueId"]
     del tree["UniqueDescendantId"]
     del tree["ProgenitorWeight"]
+    del tree["IsMainProgenitor"]
     del tree["InputHalos/HBTplus/LastMaxMass"]
 
     # Make depth first IDs unique between MPI ranks
