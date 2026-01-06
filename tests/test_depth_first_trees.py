@@ -65,3 +65,10 @@ def test_depth_first_trees(tmp_path):
             trackid = np.arange(len(tree_index_of_trackid), dtype=int)
             is_resolved = tree_index_of_trackid >= 0
             assert np.all(tree["TrackId"][tree_index_of_trackid[is_resolved]] == trackid[is_resolved])
+
+        # Check that all halos on the same branch have the same TrackId
+        i1 = 0
+        while i1 < len(tree["GalaxyId"]):
+            i2 = tree["EndMainBranchId"][i1] + 1
+            assert np.all(tree["TrackId"][i1:i2] == tree["TrackId"][i1])
+            i1 = i2
