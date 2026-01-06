@@ -250,11 +250,12 @@ def make_soap_trees(hbt_dir, soap_format, first_snap, last_snap, output_file, pa
     # Make depth first IDs unique between MPI ranks
     min_local_id = np.amin(galaxyid)
     max_local_id = np.amax(galaxyid)
-    assert min_local_id == 1
-    assert max_local_id == len(galaxyid)
+    assert min_local_id == 0
+    assert max_local_id == len(galaxyid) - 1
     assert np.all((endmainbranchid >= min_local_id) & (endmainbranchid <= max_local_id))
     assert np.all((lastprogenitorid >= min_local_id) & (lastprogenitorid <= max_local_id))
-    offset = comm.scan(max_local_id) - max_local_id
+    nr_local_ids = max_local_id - min_local_id + 1
+    offset = comm.scan(nr_local_ids) - nr_local_ids
     galaxyid += offset
     endmainbranchid += offset
     lastprogenitorid += offset

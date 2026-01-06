@@ -44,7 +44,7 @@ def depth_first_index(nodeIndex, descendantIndex, mBranch):
     depthFirst = -np.ones_like(descendantIndex)
 
     # Loop over final halos
-    next_index = 1
+    next_index = 0
     ntot = nodeIndex.shape[0]
     for ifinal in np.where(desc_ptr<0)[0]:
 
